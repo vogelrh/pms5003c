@@ -66,10 +66,11 @@ int uart_status = UART_NOT_INITIALIZED;
 /**
  * Swaps bytes in two byte words in byte array
  */
-static void swap_bytes16(uint8_t *array) {
+static void swap_bytes16(uint8_t *array, int size) {
     uint8_t temp;
     int i;
-    for (i = 0; i < sizeof(array); i = i + 2) {
+
+    for (i = 0; i < size; i = i + 2) {
         temp = array[i];
         array[i] = array[i+1];
         array[i+1] = temp;
@@ -91,39 +92,39 @@ static int read_word(uart_word *word, int swap) {
         return UART_RX_ERROR; // some read error occured.
     } else if (rx_cnt ==0) { // no data yet.
         word->value = 0;
-        //printf("no data waiting\n");
-    } else {
-        printf("rx_cnt %d\n",rx_cnt);
+    } else if (rx_cnt != 2) {
+        return UART_UNEXPECTED_DATA_ERROR;
     }
     
     if (swap) {
-        swap_bytes16(word->data);
+        swap_bytes16(word->data, 2);
     }
     return UART_OK;
 }
 
 /**
  * Read a block of bytes from the PMS5003 and populates the specified
- * pms5003_data_block union. If the byte_cnt specified is not equal to 
- * PMS5003_EXPECTED_BYTES then a UART_UNEXPECTED_DATA error status is 
- * returned.
+ * pms5003_data_block union. If an error occurs, then an error code is
+ * returned. If successful, UART_OK is returned.
  * 
  * param[out]       data        A pms5003_data_block union recieving the data.
- * param[in]        byte_cnt    Byte count returned from reading the frame length word.
  * 
  * Returns a UART status/error code.
  */
-static int read_pms_data_block(pms5003_data_block *data, int byte_cnt){
+static int read_pms_data_block(pms5003_data_block *data){
     int i;
-    int checksum = 0;
+    int checksum;
+    int rstat;
 
-    for (i=0; i < sizeof(data->raw_data);i++) {
-        data->raw_data[i] = 0;
-    }
    // get time at start an loop through reading 2 bytes from uart until
     // we find a start sequence or we exceed the timeout interval.
     clock_t begin;
     double elapse_time;
+
+    // Zero the data sturcture
+    for (i=0; i < PMS5003_EXPECTED_BYTES;i++) {
+        data->raw_data[i] = 0;
+    }
 
     begin = clock();
     uart_word sof;
@@ -131,56 +132,49 @@ static int read_pms_data_block(pms5003_data_block *data, int byte_cnt){
     while(1) { //wait for SOF word
         elapse_time = (double)(clock() - begin) / CLOCKS_PER_SEC;
         if (elapse_time >= 5.0) {
-            printf("Elapse time %0.3f", elapse_time);
             return UART_TIMEOUT_ERROR;
         }
-        int status = read_word(&sof, 0);
-        if (status == UART_OK && sof.value == PMS5003_SOF) {
+        rstat = read_word(&sof, 0);
+        if (rstat == UART_OK && sof.value == PMS5003_SOF) {
             checksum = sof.data[0] + sof.data[1];
             break;
+        } else if (rstat != UART_OK) {
+            output_uart_code(rstat);
+            return rstat; //error occured
         }
     }
-    printf("Have SOF\n");
+
     // Now read frame length word
     uart_word packet_length;
-    int rstat = read_word(&packet_length, LITTLE_ENDED);
+    rstat = read_word(&packet_length, LITTLE_ENDED);
+    if (rstat != UART_OK) {
+        return rstat;
+    }
 
     if (packet_length.value != PMS5003_EXPECTED_BYTES) {
         return UART_UNEXPECTED_DATA_ERROR;
     }
-    checksum += (packet_length.data[0] + packet_length.data[1]);
-    printf("Have packet size");
-    // Now read sensor data
-    //int rx_cnt = read(uart0_filestream,data->raw_data, PMS5003_EXPECTED_BYTES);
-    //if (rx_cnt < 0 ) { //|| rx_cnt != PMS5003_EXPECTED_BYTES) {
-     //   return UART_RX_ERROR; // some read error occured.
-    //}
-    //hack..
-    // Read until we have got all expected bytes - need timeout here
 
-    uart_word w;
-    for (i=0; i < packet_length.value; i+=2) {
-        rstat = read_word(&w,0); 
-        if (rstat != UART_OK) {
-            return rstat;
-        }
-        data->raw_data[i] = w.data[i];
-        data->raw_data[i+1] = w.data[i+1];
-        //printf("reading %d\n",rx_cnt);
+    checksum += (packet_length.data[0] + packet_length.data[1]);
+
+    // Now read sensor data, but first wait for rest of data
+    usleep(50000); // 50 milliseconds is plenty for 28 bytes at 9600 baud
+
+    int rx_cnt = read(uart0_filestream,data->raw_data, PMS5003_EXPECTED_BYTES);
+    if (rx_cnt < 0 || rx_cnt != PMS5003_EXPECTED_BYTES) {
+        return UART_RX_ERROR; // some read error occured.
     }
+
+    // Swap bytes if little ended system
     if (LITTLE_ENDED) {
-        swap_bytes16(data->raw_data);
+        swap_bytes16(data->raw_data, PMS5003_EXPECTED_BYTES);
     }
-        printf("expected %d %d\n",PMS5003_EXPECTED_BYTES, data->d.cksum );
-        for(i=0; i < PMS5003_EXPECTED_BYTES; i++) {
-            printf("[%d]\n", data->raw_data[i]);
-        }
-        printf("pm1.0 %d\npm2.5 %d\npm10 %d\n",data->d.pm1cf,data->d.pm2_5cf, data->d.pm10cf);
+
+    // Finish calculating the check sum
     for (i=0; i<PMS5003_EXPECTED_BYTES-2;i++) {
         checksum += data->raw_data[i];
     }
     if (checksum != data->d.cksum) {
-        printf("Cksum: Expected: %d Got: %d",data->d.cksum,checksum);
         return UART_CHECKSUM_ERROR;
     }
 
@@ -301,10 +295,29 @@ void output_uart_code(int error_code) {
 }
 
 int read_pms5003_data(PMS5003_DATA *data) {
-    pms5003_data_block raw_data;
-    int status = read_pms_data_block(&raw_data, PMS5003_EXPECTED_BYTES);
-    if (status == UART_OK) {
-        //transfer data to final structure
+    pms5003_data_block rd;
+    int status = read_pms_data_block(&rd); //read the sensor
+
+    if (status != UART_OK) {
+        return status;
+    }
+    //printf("PM1.0   %d\nPM2.5   %d\nPM10    %d\nPM1.0a  %d\nPM2.5a %d\nPM10a   %d\n>0.3   %d\n>0.5   %d\n>1    %d\n>2.5   %d\n>5    %d\n>10    %d\n",
+    //rd.d.pm1cf,rd.d.pm2_5cf,rd.d.pm10cf,rd.d.pm1at,rd.d.pm2_5at,rd.d.pm10at,rd.d.gt0_3,rd.d.gt0_5,rd.d.gt1,rd.d.gt2_5,rd.d.gt5,rd.d.gt10);
+
+    if (status == UART_OK) { //transfer data to final structure
+        data->pm1cf = rd.d.pm1cf;
+        data->pm2_5cf = rd.d.pm2_5cf;
+        data->pm10cf = rd.d.pm10cf;
+        data->pm1at = rd.d.pm1at;
+        data->pm2_5at = rd.d.pm2_5at;
+        data->pm10at = rd.d.pm10at;
+        data->gt0_3 = rd.d.gt0_3;
+        data->gt0_5 = rd.d.gt0_5;
+        data->gt1 = rd.d.gt1;
+        data->gt2_5 = rd.d.gt2_5;
+        data->gt5 = rd.d.gt5;
+        data->gt10 = rd.d.gt10;
+
         return UART_OK;
     }
     return status;
