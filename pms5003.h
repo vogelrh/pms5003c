@@ -1,5 +1,6 @@
 /**
- * Header file for pms5003 library
+ * C library for retrieving data from the Plantower PMS5003 particulate sensor.
+ * Modeled after the Pimoroni / pms5003-python library. 
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -18,7 +19,7 @@
 
 
 /**
- * Structure containing the pms5003 sensor data for a given reading.
+ * Structure containing the pms5003 sensor data.
  */
 typedef struct pms5003_data {
         uint16_t pm1cf;     // PM1.0 ug/m3 (ultrafine particles)
@@ -34,14 +35,6 @@ typedef struct pms5003_data {
         uint16_t gt5;       // >5.0um in 0.1L air
         uint16_t gt10;      // >10um in 0.1L air
 }PMS5003_DATA;
-
-/**
- * Structure for initializing UART for pms5003
- */
-typedef struct pms5003_uart {
-    char device; // uart device string. E.g. "/dev/serial0"
-    int baud_rate; // baud rate integer as defined in terios.h (e.g. B9600)
-}PMS5003_UART;
 
 /**
  * Initializes and configures the UART for the PMS5003 using the devices
