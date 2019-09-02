@@ -1,11 +1,15 @@
 /**
  * C library for retrieving data from the Plantower PMS5003 particulate sensor.
  * Modeled after the Pimoroni / pms5003-python library. 
+ * This library only provides UART communication with the sensor. It 
+ * does not use the hardware SET_CONTROL or RESET_CONTROL pins of the PMS5003.
  */
 #include <stdint.h>
 #include <stdio.h>
 #include <termios.h>
-
+/**
+ * Library UART error codes
+ */
 #define UART_OK 0
 #define UART_NO_DATA 1
 #define UART_NOT_INITIALIZED 2
@@ -38,7 +42,7 @@ typedef struct pms5003_data {
 
 /**
  * Initializes and configures the UART for the PMS5003 using the devices
- * default parameters.
+ * default parameters (optimized for the Raspberry Pi).
  * The UART is set up for device Serial0, 9600 baud, 8-bit, no parity, 
  * no check bit, one stop bit, read-write in a nonblocking mode.
  * 
