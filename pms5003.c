@@ -1,6 +1,8 @@
 /**
+ * Copyright (C) 2019 Robert Vogel
+ * 
  * C library for retrieving data from the Plantower PMS5003 particulate sensor.
- * Modeled after the Pimoroni / pms5003-python library.
+ * Inspired by the Pimoroni pms5003-python library.
  */
 
 #include <stdio.h>
