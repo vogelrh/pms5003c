@@ -128,6 +128,10 @@ static int read_pms_data_block(pms5003_data_block *data){
     for (i=0; i < PMS5003_EXPECTED_BYTES;i++) {
         data->raw_data[i] = 0;
     }
+    // Exit if UART is not open
+    if (uart_status != UART_OK) {
+        return UART_NOT_INITIALIZED;
+    }
 
     begin = clock();
     uart_word sof;
@@ -212,6 +216,7 @@ static int32_t convert_baudrate(int baudrate)
  * ***** Public Facing functions *****
  **************************************************/
 int pms_init_override(char *device, int baud){
+    uart_status = UART_NOT_INITIALIZED;
     if (device == NULL) {
         return UART_PARAMETER_ERROR;
     }
@@ -223,7 +228,6 @@ int pms_init_override(char *device, int baud){
 
     uart0_filestream = open(device, O_RDWR | O_NOCTTY | O_NDELAY); //open in non blocking mode
     if (uart0_filestream == -1) {
-        output_uart_code(UART_INIT_ERROR);
         return UART_INIT_ERROR;
     }
     
