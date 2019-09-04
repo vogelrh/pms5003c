@@ -164,8 +164,10 @@ static int read_pms_data_block(pms5003_data_block *data){
     usleep(50000); // 50 milliseconds is plenty for 28 bytes at 9600 baud
 
     int rx_cnt = read(uart0_filestream,data->raw_data, PMS5003_EXPECTED_BYTES);
-    if (rx_cnt < 0 || rx_cnt != PMS5003_EXPECTED_BYTES) {
+    if (rx_cnt < 0) {
         return UART_RX_ERROR; // some read error occured.
+    } else if (rx_cnt != PMS5003_EXPECTED_BYTES) {
+        return UART_UNEXPECTED_DATA_ERROR
     }
 
     // Swap bytes if little ended system
@@ -260,6 +262,7 @@ void pms_close() {
 
 void output_uart_code(int error_code) {
     char *err_msg = NULL;
+    int sysErr = 0;
     switch(error_code) {
         case UART_OK:
             err_msg = "Status: OK";
@@ -271,15 +274,19 @@ void output_uart_code(int error_code) {
             err_msg = "Status: UART not initialized";
             break;
         case UART_INIT_ERROR:
+            sysErr = 1;
             err_msg = "ERROR: UART initialization error";
             break;
         case UART_PARAMETER_ERROR:
+            sysErr = 1;
             err_msg = "ERROR: Incorrect UART parmeters provided";
             break;
         case UART_TX_ERROR:
+            sysErr = 1;
             err_msg = "ERROR: UART transmit problem";
             break;
         case UART_RX_ERROR:
+            sysErr = 1;
             err_msg = "ERROR: UART recieve problem";
             break;
         case UART_UNEXPECTED_DATA_ERROR:
@@ -293,7 +300,11 @@ void output_uart_code(int error_code) {
             break;
     }
     if (err_msg != NULL) {
-        printf("%s\n", err_msg);
+        if (sysErr) {
+            perror(err_msg);
+        } else {
+            fprintf(stderr,"%s\n", err_msg);
+        }
     }
 }
 
@@ -301,9 +312,6 @@ int read_pms5003_data(PMS5003_DATA *data) {
     pms5003_data_block rd;
     int status = read_pms_data_block(&rd); //read the sensor
 
-    if (status != UART_OK) {
-        return status;
-    }
     //printf("PM1.0   %d\nPM2.5   %d\nPM10    %d\nPM1.0a  %d\nPM2.5a %d\nPM10a   %d\n>0.3   %d\n>0.5   %d\n>1    %d\n>2.5   %d\n>5    %d\n>10    %d\n",
     //rd.d.pm1cf,rd.d.pm2_5cf,rd.d.pm10cf,rd.d.pm1at,rd.d.pm2_5at,rd.d.pm10at,rd.d.gt0_3,rd.d.gt0_5,rd.d.gt1,rd.d.gt2_5,rd.d.gt5,rd.d.gt10);
 
@@ -320,8 +328,6 @@ int read_pms5003_data(PMS5003_DATA *data) {
         data->gt2_5 = rd.d.gt2_5;
         data->gt5 = rd.d.gt5;
         data->gt10 = rd.d.gt10;
-
-        return UART_OK;
     }
     return status;
 }
