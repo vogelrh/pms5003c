@@ -4,6 +4,7 @@
  * C library for retrieving data from the Plantower PMS5003 particulate sensor.
  * Inspired by the Pimoroni pms5003-python library.
  */
+#define _XOPEN_SOURCE 700
 
 #include <stdio.h>
 #include <unistd.h>
@@ -66,6 +67,16 @@ int uart_status = UART_NOT_INITIALIZED;
 /**************************************************
  * Private functions
  **************************************************/
+/**
+ * Sleep function that uses nanosleep
+ */
+static void msleep(uint32_t ms)
+{
+  struct timespec ts;
+  ts.tv_sec = 0;
+  ts.tv_nsec = (ms % 1000) * 1000000L; //force range between 0 and 999999999 
+  nanosleep(&ts, NULL);
+}
 /**
  * Swaps bytes in two byte words in byte array
  */
@@ -184,7 +195,7 @@ static int read_pms_data_block(pms5003_data_block *data)
   checksum += (packet_length.data[0] + packet_length.data[1]);
 
   // Now read sensor data, but first wait for rest of data
-  usleep(50000); // 50 milliseconds is plenty for 28 bytes at 9600 baud
+  msleep(50); // 50 milliseconds is plenty for 28 bytes at 9600 baud
 
   int rx_cnt = read(uart0_filestream, data->raw_data, PMS5003_EXPECTED_BYTES);
   if (rx_cnt < 0)
@@ -193,7 +204,7 @@ static int read_pms_data_block(pms5003_data_block *data)
   }
   else if (rx_cnt != PMS5003_EXPECTED_BYTES)
   {
-    return UART_UNEXPECTED_DATA_ERROR
+    return UART_UNEXPECTED_DATA_ERROR;
   }
 
   // Swap bytes if little ended system
