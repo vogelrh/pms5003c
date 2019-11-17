@@ -16,7 +16,7 @@ Simply add the `pms5003.c` and the `pms5003.h` files to your C project.
 See `example.c` for more detail.
 
 ## Porting
-Since this code uses fairly standard Linux libraries, it should not be difficult to get this library up and running on different Linux systems. 
+Since this code uses fairly standard Linux libraries, it should not be difficult to get this library up and running on different Linux systems.
 
 There is one issue you must be aware of. The PMS5003 returns data as two  uint8_t bytes in Big Endian format. Therefore it is important to know the Endedness of the system running the library. There is a `#define LITTLE_ENDED` statement in pms5003.h that can be changed from the current value of 1 to 0 for Big Ended systems.
 
@@ -25,6 +25,6 @@ The UART on the Raspberry Pi needs to be reconfigured for use with the GPIO pins
 1. Run `sudo raspi-config` in the terminal
 2. Under "Interface and Serial" disable the login shell and enable the serial port hardware
 3. Edit `/boot/comfig.txt` and add the following lines to the bottom of the file:
-    *`enable_uart=1`
     *`dtoverlay=pi3-miniuart-bt`
+    *`enable_uart=1`
 4. Reboot
